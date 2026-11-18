@@ -1079,6 +1079,17 @@
 .cy-asr-fields label .ant-select { width: 100%; }
 .cy-asr-number-control { display: flex; align-items: center; gap: 8px; color: var(--rb-text-secondary); font: var(--rb-text-small); }
 .cy-asr-number { width: 120px; }
+.cy-asr-test { display: grid; gap: 14px; padding: 16px; }
+.cy-asr-test__row { display: flex; align-items: center; justify-content: space-between; gap: 16px; flex-wrap: wrap; }
+.cy-asr-test__copy { display: grid; gap: 4px; min-width: 0; }
+.cy-asr-test__copy strong { color: var(--rb-text-primary); font: var(--rb-text-small-em); }
+.cy-asr-test__copy span { color: var(--rb-text-secondary); font: var(--rb-text-small); overflow-wrap: anywhere; }
+.cy-asr-test__actions { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
+.cy-asr-test__input { position: absolute; width: 1px; height: 1px; opacity: 0; pointer-events: none; }
+.cy-asr-test__error { display: flex; align-items: flex-start; gap: 8px; padding: 10px 12px; border-radius: 10px; border: 1px solid color-mix(in srgb, var(--rb-danger, #e5484d) 35%, transparent); background: color-mix(in srgb, var(--rb-danger, #e5484d) 8%, transparent); color: var(--rb-text-primary); font: var(--rb-text-small); }
+.cy-asr-test__result { display: grid; gap: 6px; padding: 12px; border-radius: 10px; border: 1px solid var(--rb-border-subtle); background: color-mix(in srgb, var(--rb-surface-elevated) 60%, transparent); }
+.cy-asr-test__result strong { color: var(--rb-text-secondary); font: var(--rb-text-small-em); }
+.cy-asr-test__result p { margin: 0; color: var(--rb-text-primary); font: var(--rb-text-small); white-space: pre-wrap; word-break: break-word; }
 @media (max-width: 900px) {
   .cy-asr-select { width: 100%; }
 }

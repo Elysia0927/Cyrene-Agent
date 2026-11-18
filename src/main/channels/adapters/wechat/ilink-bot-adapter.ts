@@ -763,6 +763,7 @@ function isWechatAsrConfigured(): boolean {
       asrAliyunAccessKeySecret?: unknown;
       ttsMosslandKey?: unknown;
       asrMinimaxKey?: unknown;
+      asrDeepseekKey?: unknown;
     };
     if (settings.asrEngine === "local") return true;
     if (settings.asrEngine === "mossland") {
@@ -770,6 +771,9 @@ function isWechatAsrConfigured(): boolean {
     }
     if (settings.asrEngine === "minimax") {
       return Boolean(typeof settings.asrMinimaxKey === "string" && settings.asrMinimaxKey.trim());
+    }
+    if (settings.asrEngine === "deepseek") {
+      return Boolean(typeof settings.asrDeepseekKey === "string" && settings.asrDeepseekKey.trim());
     }
     if (settings.asrEngine !== "aliyun") return false;
     return Boolean(

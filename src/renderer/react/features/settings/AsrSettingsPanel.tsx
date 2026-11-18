@@ -1,14 +1,16 @@
-import { useEffect, useRef, useState } from "react";
-import { AlertCircle, AudioLines, Headphones, LoaderCircle, Mic2, X } from "lucide-react";
-import { siAlibabacloud, siMinimax } from "simple-icons";
+import { useEffect, useRef, useState, type ChangeEvent } from "react";
+import { AlertCircle, AudioLines, FileAudio, Headphones, LoaderCircle, Mic2, X } from "lucide-react";
+import { Button } from "antd";
+import { siAlibabacloud, siDeepseek, siMinimax } from "simple-icons";
 import { BrandIcon } from "../../components/ui/BrandIcon";
 import { SettingsInput, SettingsPasswordInput, SettingsSelect, SettingsSlider, SettingsSwitch } from "../../components/ui/SettingsControls";
 import { useTranslation } from "../../i18n";
 import { Card } from "../../components/ui/Card";
+import { decodeAudioFileToPcm } from "./asrTestAudio";
 
-type AsrEngine = "off" | "aliyun" | "mossland" | "minimax" | "local";
+type AsrEngine = "off" | "aliyun" | "mossland" | "minimax" | "deepseek" | "local";
 type AsrLanguage = "zh" | "en";
-type SecretField = "asrAliyunAppKey" | "asrAliyunAccessKeyId" | "asrAliyunAccessKeySecret" | "ttsMosslandKey" | "asrMinimaxKey";
+type SecretField = "asrAliyunAppKey" | "asrAliyunAccessKeyId" | "asrAliyunAccessKeySecret" | "ttsMosslandKey" | "asrMinimaxKey" | "asrDeepseekKey";
 type AsrValues = {
   asrEngine: AsrEngine;
   asrAliyunAppKey: string;
@@ -16,10 +18,19 @@ type AsrValues = {
   asrAliyunAccessKeySecret: string;
   ttsMosslandKey: string;
   asrMinimaxKey: string;
+  asrDeepseekKey: string;
   asrLanguage: AsrLanguage;
   asrVadSilenceMs: number;
   asrVadThreshold: number;
   asrShowTranscript: boolean;
+};
+
+/** 已解码、等待提交的测试音频。 */
+type TestAudio = {
+  name: string;
+  durationSec: number;
+  /** 16kHz / 16bit / mono PCM。 */
+  pcm: Uint8Array;
 };
 
 const defaults: AsrValues = {
@@ -29,6 +40,7 @@ const defaults: AsrValues = {
   asrAliyunAccessKeySecret: "",
   ttsMosslandKey: "",
   asrMinimaxKey: "",
+  asrDeepseekKey: "",
   asrLanguage: "zh",
   asrVadSilenceMs: 1000,
   asrVadThreshold: 0.01,
@@ -37,17 +49,25 @@ const defaults: AsrValues = {
 
 function readAsrValues(config: Record<string, unknown>): AsrValues {
   return {
-    asrEngine: config.asrEngine === "aliyun" || config.asrEngine === "mossland" || config.asrEngine === "minimax" || config.asrEngine === "local" ? config.asrEngine : "off",
+    asrEngine: config.asrEngine === "aliyun" || config.asrEngine === "mossland" || config.asrEngine === "minimax" || config.asrEngine === "deepseek" || config.asrEngine === "local" ? config.asrEngine : "off",
     asrAliyunAppKey: typeof config.asrAliyunAppKey === "string" ? config.asrAliyunAppKey : "",
     asrAliyunAccessKeyId: typeof config.asrAliyunAccessKeyId === "string" ? config.asrAliyunAccessKeyId : "",
     asrAliyunAccessKeySecret: typeof config.asrAliyunAccessKeySecret === "string" ? config.asrAliyunAccessKeySecret : "",
     ttsMosslandKey: typeof config.ttsMosslandKey === "string" ? config.ttsMosslandKey : "",
     asrMinimaxKey: typeof config.asrMinimaxKey === "string" ? config.asrMinimaxKey : "",
+    asrDeepseekKey: typeof config.asrDeepseekKey === "string" ? config.asrDeepseekKey : "",
     asrLanguage: config.asrLanguage === "en" ? "en" : "zh",
     asrVadSilenceMs: typeof config.asrVadSilenceMs === "number" ? config.asrVadSilenceMs : 1000,
     asrVadThreshold: typeof config.asrVadThreshold === "number" ? config.asrVadThreshold : 0.01,
     asrShowTranscript: config.asrShowTranscript === true,
   };
+}
+
+/** Electron 会把主进程异常包成 "Error invoking remote method 'x': Error: y"，这里剥掉外壳。 */
+function readErrorMessage(error: unknown, fallback: string): string {
+  const raw = error instanceof Error ? error.message : "";
+  const cleaned = raw.replace(/^Error invoking remote method '[^']*':\s*(?:Error:\s*)?/, "").trim();
+  return cleaned || fallback;
 }
 
 export function AsrSettingsPanel() {
@@ -56,8 +76,13 @@ export function AsrSettingsPanel() {
   const [silenceDraft, setSilenceDraft] = useState(String(defaults.asrVadSilenceMs));
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
+  const [testAudio, setTestAudio] = useState<TestAudio | null>(null);
+  const [testBusy, setTestBusy] = useState(false);
+  const [testError, setTestError] = useState("");
+  const [testResult, setTestResult] = useState<string | null>(null);
   const secretTimers = useRef<Partial<Record<SecretField, ReturnType<typeof setTimeout>>>>({});
   const pendingSecrets = useRef<Partial<Record<SecretField, string>>>({});
+  const testFileInput = useRef<HTMLInputElement>(null);
 
   useEffect(() => {
     let active = true;
@@ -121,10 +146,51 @@ export function AsrSettingsPanel() {
 
   function update<K extends keyof AsrValues>(key: K, value: AsrValues[K]) {
     setValues((current) => ({ ...current, [key]: value }));
-    if (key === "asrAliyunAppKey" || key === "asrAliyunAccessKeyId" || key === "asrAliyunAccessKeySecret" || key === "ttsMosslandKey" || key === "asrMinimaxKey") {
+    if (key === "asrAliyunAppKey" || key === "asrAliyunAccessKeyId" || key === "asrAliyunAccessKeySecret" || key === "ttsMosslandKey" || key === "asrMinimaxKey" || key === "asrDeepseekKey") {
       scheduleSecret(key, String(value));
     } else {
       void persist(key, value);
+    }
+  }
+
+  async function handlePickTestFile(event: ChangeEvent<HTMLInputElement>) {
+    const file = event.target.files?.[0];
+    // 清空 value：同一个文件再选一次也要触发 change。
+    event.target.value = "";
+    if (!file) return;
+
+    setTestBusy(true);
+    setTestError("");
+    setTestResult(null);
+    try {
+      const decoded = await decodeAudioFileToPcm(file);
+      setTestAudio({ name: file.name, durationSec: decoded.durationSec, pcm: decoded.pcm });
+    } catch (decodeError) {
+      setTestAudio(null);
+      setTestError(readErrorMessage(decodeError, t("settingsPage.asr.testDecodeFailed")));
+    } finally {
+      setTestBusy(false);
+    }
+  }
+
+  async function runTest() {
+    if (!testAudio) return;
+    setTestBusy(true);
+    setTestError("");
+    setTestResult(null);
+    try {
+      if (!window.tts?.transcribeAsr) throw new Error(t("settingsPage.asr.testUnavailable"));
+      const text = await window.tts.transcribeAsr({
+        engine: "deepseek",
+        // 输入框里的密钥可能还没经过防抖落盘，优先用它。
+        apiKey: values.asrDeepseekKey.trim() || undefined,
+        pcm: testAudio.pcm,
+      });
+      setTestResult(typeof text === "string" ? text.trim() : "");
+    } catch (testFailure) {
+      setTestError(readErrorMessage(testFailure, t("settingsPage.asr.testFailed")));
+    } finally {
+      setTestBusy(false);
     }
   }
 
@@ -141,6 +207,7 @@ export function AsrSettingsPanel() {
             { value: "aliyun", label: t("settingsPage.asr.engineAliyun"), icon: <BrandIcon icon={siAlibabacloud} size={20} label="Alibaba Cloud" /> },
             { value: "mossland", label: t("settingsPage.asr.engineMossland"), icon: <Mic2 size={19} /> },
             { value: "minimax", label: t("settingsPage.asr.engineMinimax"), icon: <BrandIcon icon={siMinimax} size={20} label="MiniMax" /> },
+            { value: "deepseek", label: t("settingsPage.asr.engineDeepseek"), icon: <BrandIcon icon={siDeepseek} size={20} label="DeepSeek" /> },
             { value: "local", label: t("settingsPage.asr.engineLocal"), icon: <Headphones size={19} /> },
           ] as const).map((engine) => <button key={engine.value} type="button" aria-pressed={values.asrEngine === engine.value} className={`cy-asr-engine ${values.asrEngine === engine.value ? "is-active" : ""}`} onClick={() => update("asrEngine", engine.value)}>
             <span className="cy-asr-engine__icon">{engine.icon}</span><span>{engine.label}</span>
@@ -166,6 +233,33 @@ export function AsrSettingsPanel() {
       {values.asrEngine === "minimax" && <section className="cy-settings-section">
         <div className="cy-settings-section__heading"><h2 data-settings-search-id="settingsPage.asr.minimaxTitle"><Mic2 size={18} />{t("settingsPage.asr.minimaxTitle")}</h2><p>{t("settingsPage.asr.minimaxHint")}</p></div>
         <Card className="cy-asr-fields"><label><span>{t("settingsPage.asr.minimaxKey")}</span><SettingsPasswordInput showLabel={t("settingsPage.asr.showSecret")} hideLabel={t("settingsPage.asr.hideSecret")} value={values.asrMinimaxKey} onChange={(event) => update("asrMinimaxKey", event.target.value)} onBlur={() => flushSecret("asrMinimaxKey")} autoComplete="off" /></label></Card>
+      </section>}
+
+      {values.asrEngine === "deepseek" && <section className="cy-settings-section">
+        <div className="cy-settings-section__heading"><h2 data-settings-search-id="settingsPage.asr.deepseekTitle"><BrandIcon icon={siDeepseek} size={18} label="DeepSeek" />{t("settingsPage.asr.deepseekTitle")}</h2><p>{t("settingsPage.asr.deepseekHint")}</p></div>
+        <Card className="cy-asr-fields"><label><span>{t("settingsPage.asr.deepseekKey")}</span><SettingsPasswordInput showLabel={t("settingsPage.asr.showSecret")} hideLabel={t("settingsPage.asr.hideSecret")} value={values.asrDeepseekKey} onChange={(event) => update("asrDeepseekKey", event.target.value)} onBlur={() => flushSecret("asrDeepseekKey")} autoComplete="off" /></label></Card>
+      </section>}
+
+      {values.asrEngine === "deepseek" && <section className="cy-settings-section">
+        <div className="cy-settings-section__heading"><h2 data-settings-search-id="settingsPage.asr.testTitle"><FileAudio size={18} />{t("settingsPage.asr.testTitle")}</h2><p>{t("settingsPage.asr.testHint")}</p></div>
+        <Card className="cy-asr-test">
+          <div className="cy-asr-test__row">
+            <div className="cy-asr-test__copy">
+              <strong>{t("settingsPage.asr.testFile")}</strong>
+              <span>{testAudio ? `${testAudio.name} · ${testAudio.durationSec.toFixed(1)}s` : t("settingsPage.asr.testNoFile")}</span>
+            </div>
+            <div className="cy-asr-test__actions">
+              <input ref={testFileInput} className="cy-asr-test__input" type="file" accept="audio/*,.wav,.mp3,.m4a,.ogg,.flac" aria-label={t("settingsPage.asr.testChoose")} onChange={(event) => void handlePickTestFile(event)} />
+              <Button icon={<FileAudio size={15} />} disabled={testBusy} onClick={() => testFileInput.current?.click()}>{t("settingsPage.asr.testChoose")}</Button>
+              <Button type="primary" loading={testBusy} disabled={!testAudio || testBusy} onClick={() => void runTest()}>{t("settingsPage.asr.testRun")}</Button>
+            </div>
+          </div>
+          {testError && <div className="cy-asr-test__error" role="alert"><AlertCircle size={15} aria-hidden="true" /><span>{testError}</span></div>}
+          {testResult !== null && <div className="cy-asr-test__result">
+            <strong>{t("settingsPage.asr.testResult")}</strong>
+            <p>{testResult || t("settingsPage.asr.testEmptyResult")}</p>
+          </div>}
+        </Card>
       </section>}
 
       <section className="cy-settings-section">

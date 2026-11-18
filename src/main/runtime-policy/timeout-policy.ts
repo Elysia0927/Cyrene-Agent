@@ -24,6 +24,7 @@ export type RuntimeTimeoutStage =
   | "tts-mossland"
   | "asr-mossland"
   | "asr-minimax"
+  | "asr-deepseek"
   | "external-http"
   | "vision-caption"
   | "call-management";
@@ -78,6 +79,10 @@ const STAGE_DEFAULTS: Record<RuntimeTimeoutStage, TimeoutPolicy> = {
   "asr-minimax": {
     // MiniMax 同步上传一轮语音并等待完整转写：2min，覆盖较长音频的处理时间
     totalMs: 120_000,
+  },
+  "asr-deepseek":{
+    // deepseek 同步上传一轮语音并等待完整转写：1min
+    totalMs: 60_000,
   },
   "external-http": {
     // life-tools.ts 翻译等外部 HTTP 调用：30s

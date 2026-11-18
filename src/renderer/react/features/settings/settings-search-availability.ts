@@ -15,7 +15,7 @@ export interface SearchAvailability {
 }
 
 export function isSettingsSearchAvailable(id: string, state: SearchAvailability): boolean {
-  const asr: Record<string, string> = { aliyunTitle: "aliyun", mosslandTitle: "mossland", minimaxTitle: "minimax" };
+  const asr: Record<string, string> = { aliyunTitle: "aliyun", mosslandTitle: "mossland", minimaxTitle: "minimax", deepseekTitle: "deepseek", testTitle: "deepseek" };
   const tts: Record<string, string> = { minimaxConfig: "minimax", streamingTitle: "minimax", vocalEnhanceTitle: "minimax", gptConfig: "gptsovits", customCloudConfig: "custom-cloud", mimoConfig: "mimo", mosslandConfig: "mossland" };
   if (id.startsWith("settingsPage.asr.") && asr[id.split(".").at(-1)!]) return state.asrEngine === asr[id.split(".").at(-1)!];
   if (id.startsWith("settingsPage.tts.") && tts[id.split(".").at(-1)!]) return state.ttsEngine === tts[id.split(".").at(-1)!];

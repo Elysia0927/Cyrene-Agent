@@ -95,8 +95,7 @@ describe("ASR settings migration", () => {
     expect(config.asrShowTranscript).toBe(true);
   });
 
-  it("saves the shared Mossland key after typing stops", async () => {
-    const config = { asrEngine: "mossland", ttsMosslandKey: "old-key" };
+  it("saves the shared Mossland key after typing stops", async () => {    const config = { asrEngine: "mossland", ttsMosslandKey: "old-key" };
     Object.assign(window, {
       settings: { getGeneral: async () => ({}) },
       tts: {
@@ -115,5 +114,30 @@ describe("ASR settings migration", () => {
     expect(config.ttsMosslandKey).toBe("old-key");
     await act(async () => { vi.advanceTimersByTime(850); });
     expect(config.ttsMosslandKey).toBe("new-key");
+  });
+
+  it("keeps DeepSeek selectable and renders its file test entry", async () => {
+    const config: Record<string, unknown> = { asrEngine: "off" };
+    Object.assign(window, {
+      settings: { getGeneral: async () => ({}) },
+      tts: {
+        loadSettings: async () => ({ ...config }),
+        saveSettings: async (patch: Record<string, unknown>) => { Object.assign(config, patch); return { ...config }; },
+        transcribeAsr: async () => "",
+      },
+    });
+
+    const host = await renderSettings();
+    await act(async () => { buttonByText(host, "语音识别")!.click(); });
+
+    expect(host.textContent).not.toContain("DeepSeek 配置");
+    const deepseek = buttonByText(host, "DeepSeek");
+    expect(deepseek).toBeDefined();
+    await act(async () => { deepseek!.click(); });
+
+    expect(config.asrEngine).toBe("deepseek");
+    expect(host.textContent).toContain("DeepSeek 配置");
+    expect(host.textContent).toContain("识别测试");
+    expect(host.querySelector('input[type="file"]')).not.toBeNull();
   });
 });

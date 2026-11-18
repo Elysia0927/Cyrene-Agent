@@ -299,6 +299,8 @@ const sections: {
       "settingsPage.asr.aliyunTitle",
       "settingsPage.asr.mosslandTitle",
       "settingsPage.asr.minimaxTitle",
+      "settingsPage.asr.deepseekTitle",
+      "settingsPage.asr.testTitle",
       "settingsPage.asr.callTitle",
       "settingsPage.asr.vadSilence",
       "settingsPage.asr.vadThreshold",

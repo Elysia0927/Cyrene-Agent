@@ -39,6 +39,7 @@ import { createModelBackedConversationTranscriptCompactor } from "../orchestrato
 import { ConversationJournalService } from "../orchestrator/conversation-journal-service";
 import { activeConversationRegistry } from "../chats/active-conversation-registry";
 import { registerSettingsIpc } from "../settings/settings-ipc";
+import { registerAsrIpc } from "../asr/asr-ipc";
 import { registerNewsIpc } from "../news/news-feed";
 import {
   applyGeneralSettings,
@@ -712,6 +713,9 @@ export function createDefaultApplicationDependencies(): ApplicationDependencies 
         });
         registerWikiMemoryIpc(ipc);
         registerKnowledgeBaseIpc(ipc);
+
+        // ── ASR IPC：设置页的文件测试入口 ──
+        registerAsrIpc({ ipc, getDeepseekKey: () => loadGeneralSettings().asrDeepseekKey });
 
         // ── TTS IPC ──
         registerTtsIpc({ ipc, ttsSessionService: services.ttsSession });

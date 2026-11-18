@@ -10,6 +10,7 @@ import { IPC } from "../../shared/ipc-channels";
 import { createIpcScope, type IpcScope } from "../application/ipc-scope";
 import { getAsrConfig, type AsrConfig } from "../asr/asr-config";
 import { createAsrStream, type AsrStreamSession } from "../asr/asr-dispatcher";
+import { traceAsr } from "../asr/asr-trace";
 import { synthesizeByEngine } from "../tts/tts-dispatcher";
 import type { TtsEngine } from "../../shared/tts-types";
 import { createLlmClient, type LlmRequestSettings } from "../services/llm/llm-client";
@@ -168,7 +169,21 @@ function isCurrentCall(generation: number): boolean {
   return active && generation === callGeneration;
 }
 
+/** 本轮音频帧统计：用于诊断"说话没反应"卡在哪一段。 */
+let frameCount = 0;
+let frameBytes = 0;
+
+function resetFrameStats(): void {
+  frameCount = 0;
+  frameBytes = 0;
+}
+
 function sendAsrResult(partial: string | undefined, final: string | undefined): void {
+  traceAsr("asr.result", {
+    partialLen: partial?.length ?? 0,
+    finalLen: final?.length ?? 0,
+    preview: (final ?? partial ?? "").slice(0, 40),
+  });
   if (callWindow && !callWindow.isDestroyed()) {
     callWindow.webContents.send(IPC.CALL_ASR_RESULT, { partial, final });
   }
@@ -199,6 +214,8 @@ export function startCall(): void {
   finalText = "";
   latestPartialText = "";
   callHistory.length = 0;
+  resetFrameStats();
+  traceAsr("call.start", { engine: cfg.engine, generation: callGeneration });
   console.log(LOG_PREFIX, "startCall 重置: finalText 清空, history 清空");
   startAsrStream(cfg, callGeneration);
   sendState("LISTENING");
@@ -214,9 +231,11 @@ function startAsrStream(cfg: AsrConfig, generation = callGeneration): void {
   void asrStream.start().catch((err) => {
     if (!isCurrentCall(generation)) return;
     const message = err instanceof Error ? err.message : String(err);
+    traceAsr("asr.start.failed", { engine: cfg.engine, message });
     sendError(`ASR 启动失败：${message}`);
     sendState("ERROR");
   });
+  traceAsr("asr.start", { engine: cfg.engine, generation });
 }
 
 /**
@@ -224,20 +243,24 @@ function startAsrStream(cfg: AsrConfig, generation = callGeneration): void {
  * 返回空字符串表示无有效文本；停止失败返回 null（调用方恢复 LISTENING）。
  */
 async function stopAsrAndCollectText(generation: number): Promise<string | null> {
+  traceAsr("asr.stop.enter", { hadStream: Boolean(asrStream), frames: frameCount, bytes: frameBytes });
   if (asrStream) {
     const stream = asrStream;
     asrStream = null;
     try {
-      await stream.stop();
+      const stopResult = await stream.stop();
+      traceAsr("asr.stop.done", { returnedLen: typeof stopResult === "string" ? stopResult.length : null });
     } catch (err) {
       if (!isCurrentCall(generation)) return null;
       const message = err instanceof Error ? err.message : String(err);
+      traceAsr("asr.stop.failed", { message });
       sendError(message);
       return null;
     }
   }
   if (!isCurrentCall(generation)) return null;
   const text = finalText.trim() || latestPartialText.trim();
+  traceAsr("asr.collected", { textLen: text.length, preview: text.slice(0, 40) });
   finalText = "";
   latestPartialText = "";
   return text;
@@ -359,6 +382,15 @@ async function processFinalTranscript(text: string, generation: number): Promise
 
 /** 结束本轮（VAD 静默）：停 ASR → 校验文本 → Agent → TTS → 播放。 */
 export async function endTurn(): Promise<void> {
+  traceAsr("turn.end.enter", {
+    active,
+    state: currentState,
+    finalLen: finalText.length,
+    partialLen: latestPartialText.length,
+    frames: frameCount,
+    bytes: frameBytes,
+    owner: inputOwner,
+  });
   console.log(LOG_PREFIX, "endTurn 入口: active=", active, "state=", currentState, "finalText.length=", finalText.length);
   if (!active || currentState !== "LISTENING") return;
   const generation = callGeneration;
@@ -486,6 +518,13 @@ export function stopCall(): void {
 /** 处理音频帧：转发给 ASR；外部输入持有期间忽略通话音频，防止双输入源。 */
 export function handleAudioFrame(frame: Buffer): void {
   if (inputOwner === "external") return;
+  if (!active) return;
+  frameCount += 1;
+  frameBytes += frame.length;
+  // 每满 1 秒（16kHz/16bit/mono 下 50 帧 = 32000 字节）记一次，避免刷爆日志。
+  if (frameCount % 50 === 0) {
+    traceAsr("audio.frames", { frames: frameCount, bytes: frameBytes, state: currentState, hasStream: Boolean(asrStream) });
+  }
   if (asrStream && currentState === "LISTENING") {
     asrStream.sendAudio(frame);
   }

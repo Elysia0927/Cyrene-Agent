@@ -386,6 +386,9 @@ export const IPC = {
   TOKEN_USAGE_GET: "token-usage:get",
   TOKEN_USAGE_CLEAR: "token-usage:clear",
 
+  // ASR 语音识别
+  ASR_TRANSCRIBE_PCM: "asr:transcribe-pcm", // 设置页测试：提交 16kHz/16bit/mono PCM → 文本
+
   // TTS 语音合成
   TTS_UPLOAD: "tts:upload",          // 上传音频文件 → file_id
   TTS_CLONE: "tts:clone",           // 音色快速复刻 → voice_id

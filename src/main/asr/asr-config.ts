@@ -16,7 +16,12 @@ export interface MiniMaxAsrConfig {
   apiKey: string;
 }
 
-export type AsrConfig = AliyunAsrConfig | MosslandAsrConfig | MiniMaxAsrConfig;
+export interface DeepSeekAsrConfig {
+  engine: "deepseek";
+  apiKey: string;
+}
+
+export type AsrConfig = AliyunAsrConfig | MosslandAsrConfig | MiniMaxAsrConfig | DeepSeekAsrConfig;
 
 let asrConfigGetter: (() => AsrConfig | null) | null = null;
 

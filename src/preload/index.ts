@@ -971,6 +971,9 @@ const ttsApi = {
   upload: (apiKey: string, filePath: string, purpose: "voice_clone" | "prompt_audio") =>
     ipcRenderer.invoke(IPC.TTS_UPLOAD, { apiKey, filePath, purpose }),
   pickAudio: () => ipcRenderer.invoke(IPC.TTS_PICK_AUDIO),
+  // ASR 设置页测试：渲染端已把音频解码成 16kHz/16bit/mono PCM
+  transcribeAsr: (payload: { engine: string; apiKey?: string; pcm: Uint8Array }) =>
+    ipcRenderer.invoke(IPC.ASR_TRANSCRIBE_PCM, payload),
   clone: (payload: {
     apiKey: string; fileId: string; voiceId: string;
     promptAudioId?: string; promptText?: string;

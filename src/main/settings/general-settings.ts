@@ -157,8 +157,8 @@ export interface GeneralSettings {
   emailSmtpPass: string;
   /** 发件人显示名（可选） */
   emailFromName: string;
-  /** 🎧ASR 服务商：off(关闭) | aliyun(阿里云) | mossland(MOSI) | minimax | local(本地,占位) */
-  asrEngine: "off" | "aliyun" | "mossland" | "minimax" | "local";
+  /** 🎧ASR 服务商：off(关闭) | aliyun(阿里云) | mossland(MOSI) | minimax | deepseek | local(本地,占位) */
+  asrEngine: "off" | "aliyun" | "mossland" | "minimax" | "deepseek" | "local";
   /** 阿里云智能语音交互 AppKey */
   asrAliyunAppKey: string;
   /** 阿里云 RAM AccessKey ID */
@@ -167,6 +167,8 @@ export interface GeneralSettings {
   asrAliyunAccessKeySecret: string;
   /** MiniMax 语音识别 API Key */
   asrMinimaxKey: string;
+  /** DeepSeek 语音识别 API Key（与其他 DeepSeek 服务各自独立） */
+  asrDeepseekKey: string;
   /** ASR 识别语言：zh(中文) | en(英文) | auto(自动) */
   asrLanguage: "zh" | "en" | "auto";
   /** VAD 静默检测阈值（毫秒），500~2000，默认 1000 */

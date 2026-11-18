@@ -220,6 +220,9 @@ declare global {
     tts?: {
       loadSettings: () => Promise<Record<string, unknown>>;
       saveSettings: (patch: Record<string, unknown>) => Promise<unknown>;
+      pickAudio?: () => Promise<string | null>;
+      /** 语音识别设置页测试：提交 16kHz/16bit/mono PCM，返回转写文本。 */
+      transcribeAsr?: (payload: { engine: string; apiKey?: string; pcm: Uint8Array }) => Promise<string>;
     };
     call?: {
       start: () => void;
